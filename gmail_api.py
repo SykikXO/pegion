@@ -50,6 +50,10 @@ def remove_links(text):
     text = re.sub(r'www\.\S+', '', text)
     return text
 
+def remove_double_whitespace(text):
+    """Removes double whitespace from the text."""
+    return ' '.join(text.split())
+
 def get_email_body(payload):
     """
     Recursively extracts the email body from the payload.
@@ -64,14 +68,14 @@ def get_email_body(payload):
                 if data:
                     text = base64.urlsafe_b64decode(data).decode()
                     if text and text.strip().lower() != "null":
-                        return text
+                        return remove_double_whitespace(text)
         # 2. Look for text/html
         for part in payload['parts']:
             if part['mimeType'] == 'text/html':
                 data = part['body'].get('data')
                 if data:
                     html = base64.urlsafe_b64decode(data).decode()
-                    return strip_html_tags(html)
+                    return remove_double_whitespace(strip_html_tags(html))
         # 3. Recurse into nested parts
         for part in payload['parts']:
             if 'parts' in part:
@@ -83,8 +87,8 @@ def get_email_body(payload):
         if data:
             content = base64.urlsafe_b64decode(data).decode()
             if payload.get('mimeType') == 'text/html':
-                return strip_html_tags(content)
-            return content
+                return remove_double_whitespace(strip_html_tags(content))
+            return remove_double_whitespace(content)
             
     return body or "(No readable content found)"
 

@@ -63,9 +63,9 @@ async def poll_emails(context: ContextTypes.DEFAULT_TYPE):
                     
                     body = get_email_body(payload)
                     clean_body = remove_links(body)
-                    
+                    summary = ollama_integration(clean_body, subject, sender)
                     # Construct Notification
-                    notification = f"📧 *New Email*\n*From:* {sender}\n*Subject:* {subject}\n\n{clean_body}"
+                    notification = f"{summary}"
                     
                     # Telegram limit (4096 chars)
                     if len(notification) > 4000:
