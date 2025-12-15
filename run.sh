@@ -34,7 +34,17 @@ while true; do
     fi
     
     echo "Starting bot..."
-    nohup venv/bin/python main.py > bot.log 2>&1 &
+    # Run in foreground with tee for dual output (terminal + file)
+    venv/bin/python -u main.py 2>&1 | tee -a bot.log &
+    BOT_PID=$!
+    
+    # Trim log to last 1000 lines periodically
+    (while kill -0 $BOT_PID 2>/dev/null; do
+      sleep 60
+      if [ -f bot.log ] && [ $(wc -l < bot.log) -gt 1000 ]; then
+        tail -1000 bot.log > bot.log.tmp && mv bot.log.tmp bot.log
+      fi
+    done) &
   fi
   
   sleep 10
