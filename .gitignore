@@ -17,3 +17,7 @@ email_*.txt
 
 # OS
 .DS_Store
+
+# Runtime
+.req_hash
+bot.log

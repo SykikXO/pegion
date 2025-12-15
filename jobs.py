@@ -4,7 +4,6 @@ jobs.py
 -------
 Background recurring tasks:
 - poll_emails: Checks Gmail for new messages for all users.
-- check_updates: Checks Git for code updates and restarts if needed.
 """
 
 import os
@@ -16,7 +15,7 @@ from telegram.ext import ContextTypes
 from config import USERS_DIR, ADMIN_CHAT_ID
 from gmail_api import get_gmail_service, list_messages, get_email_body, remove_links, mark_as_read
 from history import load_history, save_history
-from ollama_integration import ollama_integration
+from ollama_integration import ollama_summarize
 
 async def poll_emails(context: ContextTypes.DEFAULT_TYPE):
     """
@@ -64,15 +63,15 @@ async def poll_emails(context: ContextTypes.DEFAULT_TYPE):
                     
                     body = get_email_body(payload)
                     clean_body = remove_links(body)
-                    summary = ollama_integration(clean_body, subject, sender)
-                    # Construct Notification
-                    notification = f"{summary}"
+                    
+                    # Use async summarization (non-blocking)
+                    summary = await ollama_summarize(clean_body, subject, sender)
                     
                     # Telegram limit (4096 chars)
-                    if len(notification) > 4000:
-                        notification = notification[:4000] + "..."
+                    if len(summary) > 4000:
+                        summary = summary[:4000] + "..."
                         
-                    await context.bot.send_message(chat_id=chat_id, text=notification, parse_mode='Markdown')
+                    await context.bot.send_message(chat_id=chat_id, text=summary, parse_mode='Markdown')
                     
                     # Mark as Read and Update History
                     mark_as_read(service, msg['id'])
@@ -88,32 +87,3 @@ async def poll_emails(context: ContextTypes.DEFAULT_TYPE):
                 history = history[-10:]
             save_history(chat_id, history)
 
-async def check_updates(context: ContextTypes.DEFAULT_TYPE):
-    """
-    Job that checks for Git updates periodically.
-    If updates are found, it pulls and exits (triggering restart by run.sh).
-    """
-    try:
-        # 1. Fetch changes
-        process = await asyncio.create_subprocess_shell(
-            "git fetch && git status -uno",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await process.communicate()
-        output = stdout.decode()
-        
-        # 2. Check status
-        if "Your branch is behind" in output:
-            logging.info("Update detected. Pulling...")
-            await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text="Update detected! Pulling changes and restarting...")
-            
-            # 3. Pull
-            await asyncio.create_subprocess_shell("git pull")
-            
-            # 4. Restart (Exit process)
-            import sys
-            sys.exit(0)
-            
-    except Exception as e:
-        logging.error(f"Auto-update check failed: {e}")

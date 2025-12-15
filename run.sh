@@ -19,11 +19,22 @@ while true; do
   fi
   
   if ! pgrep -f "venv/bin/python.*main\.py" > /dev/null; then
-    echo "Setting up Python environment..."
-    venv/bin/python -m pip install --upgrade pip
-    venv/bin/python -m pip install -r requirements.txt
+    echo "Bot not running. Starting..."
+    
+    # Only install deps if requirements.txt changed
+    REQ_HASH=$(md5sum requirements.txt | cut -d' ' -f1)
+    CACHED_HASH=""
+    [ -f .req_hash ] && CACHED_HASH=$(cat .req_hash)
+    
+    if [ "$REQ_HASH" != "$CACHED_HASH" ]; then
+      echo "Requirements changed. Installing dependencies..."
+      venv/bin/python -m pip install --upgrade pip -q
+      venv/bin/python -m pip install -r requirements.txt -q
+      echo "$REQ_HASH" > .req_hash
+    fi
+    
     echo "Starting bot..."
-    venv/bin/python main.py & disown
+    nohup venv/bin/python main.py > bot.log 2>&1 &
   fi
   
   sleep 10
