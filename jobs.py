@@ -16,6 +16,7 @@ from telegram.ext import ContextTypes
 from config import USERS_DIR, ADMIN_CHAT_ID
 from gmail_api import get_gmail_service, list_messages, get_email_body, remove_links, mark_as_read
 from history import load_history, save_history
+from ollama_integration import ollama_integration
 
 async def poll_emails(context: ContextTypes.DEFAULT_TYPE):
     """
