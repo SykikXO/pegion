@@ -40,9 +40,26 @@ def get_gmail_service(chat_id):
     return build('gmail', 'v1', credentials=creds)
 
 def strip_html_tags(text):
-    """Simple regex to strip HTML tags from body text."""
+    """
+    Strips HTML tags but preserves links by extracting URLs from anchor tags.
+    """
+    # Extract URLs from anchors first
+    links = re.findall(r'<a[^>]+href=["\']([^"\']+)["\']', text, re.IGNORECASE)
+    
+    # Remove HTML tags
     clean = re.compile('<.*?>')
-    return re.sub(clean, '', text)
+    text = re.sub(clean, ' ', text)
+    
+    # Append unique links at the end if they exist
+    if links:
+        # Filter out tracking/unsubscribe links
+        good_links = [l for l in links if not any(x in l.lower() for x in 
+            ['unsubscribe', 'mailto:', 'tel:', 'track', 'click', 'open.', 'list-'])]
+        unique_links = list(dict.fromkeys(good_links))[:3]  # Top 3 unique
+        if unique_links:
+            text += "\n\nLinks:\n" + "\n".join(unique_links)
+    
+    return text
 
 def remove_links(text):
     """Removes http/https and www links from the text."""
