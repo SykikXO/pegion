@@ -26,28 +26,8 @@ while true; do
       echo "$REQ_HASH" > .req_hash
     fi
     
-    # Rebuild Ollama model if Modelfile changed
-    if [ -f Modelfile ]; then
-      MODEL_HASH=$(md5sum Modelfile | awk '{print $1}')
-      CACHED_MODEL=""
-      [ -f .modelfile_hash ] && CACHED_MODEL=$(cat .modelfile_hash)
-      
-      if [ "$MODEL_HASH" != "$CACHED_MODEL" ]; then
-        echo "Modelfile changed. Rebuilding Ollama model..."
-        echo "Current Hash: $MODEL_HASH"
-        echo "Cached Hash: $CACHED_MODEL"
-        
-        if ollama create sum -f Modelfile; then
-            echo "✅ Ollama model rebuilt successfully."
-            echo "$MODEL_HASH" > .modelfile_hash
-        else
-            echo "❌ FAILED to rebuild Ollama model. Will retry next loop."
-        fi
-      fi
-    fi
-    
     echo "Starting bot..."
-    # Run in foreground with tee for dual output (terminal + file)
+    ollama create sum -f Modelfile
     venv/bin/python -u main.py 2>&1 | tee -a bot.log &
     BOT_PID=$!
     
