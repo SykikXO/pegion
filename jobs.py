@@ -70,8 +70,8 @@ async def poll_emails(context: ContextTypes.DEFAULT_TYPE):
                     if len(summary) > 4000:
                         summary = summary[:4000] + "..."
                     
-                    # Send without parse_mode to avoid Markdown errors from Ollama
-                    await context.bot.send_message(chat_id=chat_id, text=summary)
+                    # Send with Markdown formatting
+                    await context.bot.send_message(chat_id=chat_id, text=summary, parse_mode='Markdown')
                     
                     # Mark as Read and Update History
                     mark_as_read(service, msg['id'])
