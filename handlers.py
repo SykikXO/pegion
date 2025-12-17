@@ -285,15 +285,23 @@ async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown Sender')
         
         body = get_email_body(payload)
-        clean_body = remove_links(body)
+        body = get_email_body(payload)
+        # Don't remove links, Ollama needs context
         
         # Summarize
-        summary = await ollama_summarize(clean_body, subject, sender)
+        summary = await ollama_summarize(body, subject, sender)
         
         if len(summary) > 4000:
             summary = summary[:4000] + "..."
+            
+        # Check privacy setting
+        is_protected = user_privacy.get(chat_id, False)
         
-        await update.message.reply_text(summary)
+        await update.message.reply_text(
+            summary, 
+            parse_mode='Markdown',
+            protect_content=is_protected
+        )
         
     except Exception as e:
         await update.message.reply_text(f"Error: {e}")
