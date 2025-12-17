@@ -22,5 +22,5 @@ EXAMPLE OUTPUT:
 _Reset password if not you_
 """
 
-PARAMETER temperature 0.3
+PARAMETER temperature 0.1
 PARAMETER num_ctx 4096
