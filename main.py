@@ -9,7 +9,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 
 from config import BOT_TOKEN, POLL_INTERVAL, ADMIN_CHAT_ID
 from handlers import start, grant_access, handle_message, status_command, test_command
-from jobs import poll_emails
+from jobs import poll_emails, check_updates
 
 def main():
     print("Building application...")
@@ -30,8 +30,9 @@ def main():
 
     # --- JOBS ---
     # Poll emails every POLL_INTERVAL seconds
-    # Note: Updates are handled by run.sh, not in Python anymore
-    application.job_queue.run_repeating(poll_emails, interval=POLL_INTERVAL, first=100) 
+    application.job_queue.run_repeating(poll_emails, interval=POLL_INTERVAL, first=100)
+    # Check for updates every 5 minutes
+    application.job_queue.run_repeating(check_updates, interval=300, first=30) 
 
     print("Bot started...")
     application.run_polling()

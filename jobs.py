@@ -91,3 +91,41 @@ async def poll_emails(context: ContextTypes.DEFAULT_TYPE):
                 history = history[-10:]
             save_history(chat_id, history)
 
+
+async def check_updates(context: ContextTypes.DEFAULT_TYPE):
+    """
+    Job that checks for Git updates periodically.
+    Sends notification before restart.
+    """
+    import sys
+    
+    try:
+        process = await asyncio.create_subprocess_shell(
+            "git fetch && git status -uno",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, _ = await process.communicate()
+        output = stdout.decode()
+        
+        if "Your branch is behind" in output:
+            # Get new version
+            proc2 = await asyncio.create_subprocess_shell(
+                "git rev-parse --short @{u}",
+                stdout=asyncio.subprocess.PIPE
+            )
+            out2, _ = await proc2.communicate()
+            new_version = out2.decode().strip()
+            
+            # Notify admin
+            msg = f"○ Update available ({new_version})\n○ Restarting..."
+            await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=msg)
+            
+            # Pull and exit (run.sh will restart)
+            await asyncio.create_subprocess_shell("git pull")
+            await asyncio.sleep(2)
+            sys.exit(0)
+            
+    except Exception as e:
+        logging.error(f"Update check failed: {e}")
+

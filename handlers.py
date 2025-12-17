@@ -143,15 +143,27 @@ from ollama_integration import ollama_summarize
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Handler for /status command.
-    Returns battery percentage and CPU temperature (Android/Termux).
+    Returns battery, CPU temp, and version info.
     """
     # Admin only
     if str(update.effective_chat.id) != str(ADMIN_CHAT_ID):
         return
     
     try:
+        # Git version
+        version = "unknown"
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0:
+                version = result.stdout.strip()
+        except:
+            pass
+        
         # Battery (Android)
-        battery = "Unknown"
+        battery = "—"
         try:
             result = subprocess.run(
                 ["termux-battery-status"],
@@ -159,9 +171,11 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             if result.returncode == 0:
                 data = json.loads(result.stdout)
-                battery = f"{data.get('percentage', '?')}% ({data.get('status', 'unknown')})"
+                pct = data.get('percentage', '?')
+                status = data.get('status', '').lower()
+                icon = "⚡" if status == "charging" else "○"
+                battery = f"{pct}% {icon}"
         except:
-            # Fallback: try reading from sysfs
             try:
                 with open('/sys/class/power_supply/battery/capacity', 'r') as f:
                     battery = f"{f.read().strip()}%"
@@ -169,7 +183,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
         
         # CPU Temperature
-        cpu_temp = "Unknown"
+        cpu_temp = "—"
         temp_paths = [
             '/sys/class/thermal/thermal_zone3/temp',
             '/sys/devices/virtual/thermal/thermal_zone3/temp'
@@ -178,22 +192,23 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 with open(path, 'r') as f:
                     temp = int(f.read().strip()) / 1000
-                    cpu_temp = f"{temp:.1f}°C"
+                    cpu_temp = f"{temp:.0f}°"
                     break
             except:
                 continue
         
         msg = (
-            f"� **Device Status**\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"🔋 Battery: {battery}\n"
-            f"🌡️ CPU Temp: {cpu_temp}\n"
-            f"✅ Bot: Running"
+            f"▪ status\n"
+            f"────────────\n"
+            f"○ version   {version}\n"
+            f"○ battery   {battery}\n"
+            f"○ cpu temp  {cpu_temp}\n"
+            f"○ bot       running"
         )
-        await update.message.reply_text(msg, parse_mode='Markdown')
+        await update.message.reply_text(f"```\n{msg}\n```", parse_mode='Markdown')
         
     except Exception as e:
-        await update.message.reply_text(f"Error getting status: {e}")
+        await update.message.reply_text(f"Error: {e}")
 
 async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """

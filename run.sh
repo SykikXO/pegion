@@ -2,22 +2,15 @@
 REPO_DIR="$(realpath .)"
 cd "$REPO_DIR" || exit 1
 
-restart_all() {
-  echo "Update detected! Killing Python and restarting..."
+restart_bot() {
+  echo "Restarting bot..."
   pkill -f "venv/bin/python.*main\.py" 2>/dev/null
   sleep 2
-  exec ./run.sh "$@"  # Simple, works from repo root
+  exec ./run.sh "$@"
 }
 
 while true; do
-  echo "Checking for updates..."
-  git fetch origin 2>/dev/null || { sleep 10; continue; }
-  
-  if [ "$(git rev-parse HEAD)" != "$(git rev-parse @{u})" ]; then
-    git pull origin "$(git branch --show-current)"
-    restart_all
-  fi
-  
+  # Check if bot is running
   if ! pgrep -f "venv/bin/python.*main\.py" > /dev/null; then
     echo "Bot not running. Starting..."
     
