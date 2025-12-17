@@ -84,6 +84,9 @@ async def poll_emails(context: ContextTypes.DEFAULT_TYPE):
                     # Still add to history to prevent infinite retry loop
                     history.append(msg['id'])
                     new_ids = True
+                
+                # Yield to event loop so user commands stay responsive
+                await asyncio.sleep(0)
         
         # Save History if updated
         if new_ids:
