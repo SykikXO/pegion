@@ -20,6 +20,47 @@ from config import ADMIN_CHAT_ID, SCOPES, USERS_DIR
 # Temporary storage for OAuth flows: {chat_id: flow_object}
 pending_flows = {}
 
+# Privacy settings per user: {chat_id: bool}
+user_privacy = {}
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler for /help command."""
+    chat_id = update.effective_chat.id
+    is_admin = str(chat_id) == str(ADMIN_CHAT_ID)
+    
+    user_cmds = (
+        "*Available Commands*\n"
+        "─────────────────\n"
+        "/help - Show this message\n"
+        "/test - Summarize random email\n"
+        "/privacy - Toggle forward protection"
+    )
+    
+    admin_cmds = (
+        "\n\n*Admin Commands*\n"
+        "─────────────────\n"
+        "/grant <id> - Authorize user\n"
+        "/status - Device status"
+    )
+    
+    msg = user_cmds + (admin_cmds if is_admin else "")
+    await update.message.reply_text(msg, parse_mode='Markdown')
+
+async def privacy_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler for /privacy command - toggles forward protection."""
+    chat_id = update.effective_chat.id
+    
+    # Toggle privacy setting
+    current = user_privacy.get(chat_id, False)
+    user_privacy[chat_id] = not current
+    
+    if user_privacy[chat_id]:
+        msg = "🔒 Privacy ON\n_Messages won't be forwardable_"
+    else:
+        msg = "🔓 Privacy OFF\n_Messages can be forwarded_"
+    
+    await update.message.reply_text(msg, parse_mode='Markdown')
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Handler for /start command.
