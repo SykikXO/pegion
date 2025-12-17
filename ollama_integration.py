@@ -32,8 +32,7 @@ Subject: {subject}
         # e.g., <think>reasoning...</think>actual response
         summary = re.sub(r'<think>.*?</think>', '', summary, flags=re.DOTALL).strip()
         
-        # Add header for context
-        return f"📧 {subject}\n\n{summary}"
+        return summary
         
     except Exception as e:
         logging.error(f"Ollama summarization failed: {e}")

@@ -15,6 +15,7 @@ RULES:
 - One line headline, one line detail
 - Skip filler words
 - Include link only if critical
+- Use emojis sparingly (max 1)
 
 EXAMPLE INPUT: Zerodha login from new IP
 EXAMPLE OUTPUT:
