@@ -8,7 +8,7 @@ Sets up the Application, registers handlers, starts the JobQueue, and runs the b
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
 
 from config import BOT_TOKEN, POLL_INTERVAL, ADMIN_CHAT_ID
-from handlers import start, grant_access, handle_message
+from handlers import start, grant_access, handle_message, status_command, test_command
 from jobs import poll_emails
 
 def main():
@@ -20,6 +20,10 @@ def main():
     application.add_handler(CommandHandler("start", start))
     # /grant <id> (Admin only)
     application.add_handler(CommandHandler("grant", grant_access))
+    # /status - Device status (Admin only)
+    application.add_handler(CommandHandler("status", status_command))
+    # /test - Summarize random email
+    application.add_handler(CommandHandler("test", test_command))
     # /code <code>, or just text for Email/Code
     application.add_handler(CommandHandler("code", handle_message))
     application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))

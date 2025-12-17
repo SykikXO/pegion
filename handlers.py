@@ -134,3 +134,110 @@ async def grant_access(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Invitation sent to {target_chat_id}.")
     except Exception as e:
         await update.message.reply_text(f"Failed to send to user: {e}")
+
+import subprocess
+import random
+from gmail_api import get_gmail_service, get_email_body, remove_links
+from ollama_integration import ollama_summarize
+
+async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handler for /status command.
+    Returns battery percentage and CPU temperature (Android/Termux).
+    """
+    # Admin only
+    if str(update.effective_chat.id) != str(ADMIN_CHAT_ID):
+        return
+    
+    try:
+        # Battery (Android)
+        battery = "Unknown"
+        try:
+            result = subprocess.run(
+                ["termux-battery-status"],
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode == 0:
+                data = json.loads(result.stdout)
+                battery = f"{data.get('percentage', '?')}% ({data.get('status', 'unknown')})"
+        except:
+            # Fallback: try reading from sysfs
+            try:
+                with open('/sys/class/power_supply/battery/capacity', 'r') as f:
+                    battery = f"{f.read().strip()}%"
+            except:
+                pass
+        
+        # CPU Temperature
+        cpu_temp = "Unknown"
+        temp_paths = [
+            '/sys/class/thermal/thermal_zone3/temp',
+            '/sys/devices/virtual/thermal/thermal_zone3/temp'
+        ]
+        for path in temp_paths:
+            try:
+                with open(path, 'r') as f:
+                    temp = int(f.read().strip()) / 1000
+                    cpu_temp = f"{temp:.1f}°C"
+                    break
+            except:
+                continue
+        
+        msg = (
+            f"� **Device Status**\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"🔋 Battery: {battery}\n"
+            f"🌡️ CPU Temp: {cpu_temp}\n"
+            f"✅ Bot: Running"
+        )
+        await update.message.reply_text(msg, parse_mode='Markdown')
+        
+    except Exception as e:
+        await update.message.reply_text(f"Error getting status: {e}")
+
+async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handler for /test command.
+    Picks a random email from last 20 and summarizes it.
+    """
+    chat_id = update.effective_chat.id
+    
+    # Get Gmail service for requesting user
+    service = get_gmail_service(str(chat_id))
+    if not service:
+        await update.message.reply_text("You haven't connected your Gmail yet. Send your email to get started.")
+        return
+    
+    try:
+        await update.message.reply_text("🔍 Fetching random email...")
+        
+        # Get last 20 emails (any, not just unread)
+        results = service.users().messages().list(userId='me', maxResults=20).execute()
+        messages = results.get('messages', [])
+        
+        if not messages:
+            await update.message.reply_text("No emails found.")
+            return
+        
+        # Pick random one
+        msg = random.choice(messages)
+        message_detail = service.users().messages().get(userId='me', id=msg['id']).execute()
+        payload = message_detail.get('payload', {})
+        headers = payload.get('headers', [])
+        
+        subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
+        sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown Sender')
+        
+        body = get_email_body(payload)
+        clean_body = remove_links(body)
+        
+        # Summarize
+        summary = await ollama_summarize(clean_body, subject, sender)
+        
+        if len(summary) > 4000:
+            summary = summary[:4000] + "..."
+        
+        await update.message.reply_text(summary)
+        
+    except Exception as e:
+        await update.message.reply_text(f"Error: {e}")
