@@ -10,7 +10,7 @@ import subprocess
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
 
 from config import BOT_TOKEN, POLL_INTERVAL, ADMIN_CHAT_ID
-from handlers import start, grant_access, handle_message, status_command, test_command
+from handlers import start, grant_access, handle_message, status_command, test_command, help_command, privacy_command
 from jobs import poll_emails, check_updates
 
 async def startup_notify(context):
@@ -33,6 +33,10 @@ def main():
     # --- HANDLERS ---
     # /start
     application.add_handler(CommandHandler("start", start))
+    # /help
+    application.add_handler(CommandHandler("help", help_command))
+    # /privacy
+    application.add_handler(CommandHandler("privacy", privacy_command))
     # /grant <id> (Admin only)
     application.add_handler(CommandHandler("grant", grant_access))
     # /status - Device status (Admin only)

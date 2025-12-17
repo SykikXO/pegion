@@ -16,6 +16,7 @@ from config import USERS_DIR, ADMIN_CHAT_ID
 from gmail_api import get_gmail_service, list_messages, get_email_body, remove_links, mark_as_read
 from history import load_history, save_history
 from ollama_integration import ollama_summarize
+from handlers import user_privacy
 
 async def poll_emails(context: ContextTypes.DEFAULT_TYPE):
     """
@@ -70,8 +71,16 @@ async def poll_emails(context: ContextTypes.DEFAULT_TYPE):
                     if len(summary) > 4000:
                         summary = summary[:4000] + "..."
                     
-                    # Send with Markdown formatting
-                    await context.bot.send_message(chat_id=chat_id, text=summary, parse_mode='Markdown')
+                    # Check privacy setting (cast chat_id to int for dict lookup)
+                    is_protected = user_privacy.get(int(chat_id), False)
+                    
+                    # Send with Markdown formatting and Privacy setting
+                    await context.bot.send_message(
+                        chat_id=chat_id, 
+                        text=summary, 
+                        parse_mode='Markdown',
+                        protect_content=is_protected
+                    )
                     
                     # Mark as Read and Update History
                     mark_as_read(service, msg['id'])
