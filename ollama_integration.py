@@ -13,14 +13,27 @@ def _sync_summarize(body, subject, sender):
     Synchronous call to Ollama. Called via executor to avoid blocking.
     """
     try:
+        # Structured prompt that works better with the Modelfile's system instructions
+        prompt = f"""EMAIL TO SUMMARIZE:
+
+From: {sender}
+Subject: {subject}
+
+{body[:3000]}"""  # Limit body to avoid context overflow
+
         response = ollama.chat(model='sum', messages=[
-            {'role': 'user', 'content': f"sender: {sender}\nsubject: {subject}\nbody: {body}"}
+            {'role': 'user', 'content': prompt}
         ])
-        return response['message']['content']
+        
+        summary = response['message']['content'].strip()
+        
+        # Add header for context
+        return f"📧 {subject}\n\n{summary}"
+        
     except Exception as e:
         logging.error(f"Ollama summarization failed: {e}")
         # Fallback to raw email if Ollama fails
-        return f"📧 *New Email*\n*From:* {sender}\n*Subject:* {subject}\n\n{body[:500]}..."
+        return f"📧 New Email\nFrom: {sender}\nSubject: {subject}\n\n{body[:500]}..."
 
 async def ollama_summarize(body, subject, sender):
     """
