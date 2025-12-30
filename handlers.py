@@ -11,11 +11,12 @@ import os
 import re
 import json
 import time
+from googleapiclient.discovery import build
 from telegram import Update
 from telegram.ext import ContextTypes
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-from config import ADMIN_CHAT_ID, SCOPES, USERS_DIR
+from config import ADMIN_CHAT_ID, SCOPES, USERS_DIR, HISTORY_DIR
 
 # Temporary storage for OAuth flows: {chat_id: flow_object}
 pending_flows = {}
@@ -110,15 +111,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             flow.fetch_token(code=code)
             creds = flow.credentials
             
-            # Save credentials to users/ directory
-            with open(os.path.join(USERS_DIR, f"{chat_id}.json"), 'w') as f:
+            # Temporary service to get actual email
+            temp_service = build('gmail', 'v1', credentials=creds)
+            profile = temp_service.users().getProfile(userId='me').execute()
+            user_email = profile.get('emailAddress', 'unknown')
+            
+            # Create user directory
+            user_dir = os.path.join(USERS_DIR, str(chat_id))
+            os.makedirs(user_dir, exist_ok=True)
+            
+            # Save credentials to users/{chat_id}/{email}.json
+            with open(os.path.join(user_dir, f"{user_email}.json"), 'w') as f:
                 f.write(creds.to_json())
             
             # Save startup timestamp to ignore old emails
-            with open(os.path.join(USERS_DIR, f"{chat_id}_meta.json"), 'w') as f:
+            with open(os.path.join(user_dir, f"{user_email}_meta.json"), 'w') as f:
                  json.dump({"start_time": int(time.time())}, f)
 
-            await update.message.reply_text("Setup complete! You will now receive email notifications.")
+            await update.message.reply_text(f"Setup complete for {user_email}! You will now receive email notifications.")
         except Exception as e:
             await update.message.reply_text(f"Authentication failed: {e}. Please ask admin for a new link.")
         return
@@ -258,10 +268,29 @@ async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     chat_id = update.effective_chat.id
     
-    # Get Gmail service for requesting user
-    service = get_gmail_service(str(chat_id))
+    # Get all linked emails for this user
+    user_dir = os.path.join(USERS_DIR, str(chat_id))
+    emails = []
+    if os.path.isdir(user_dir):
+        emails = [f.replace('.json', '') for f in os.listdir(user_dir) if f.endswith('.json') and '_meta' not in f]
+    
+    # Fallback/Legacy
+    legacy_file = os.path.join(USERS_DIR, f"{chat_id}.json")
+    if os.path.exists(legacy_file):
+        emails.append(None) # None signifies root file
+
+    if not emails:
+        await update.message.reply_text("You haven't connected any Gmail accounts yet. Send your email to get started.")
+        return
+    
+    # If multiple emails, user should specify or we pick first? 
+    # For /test, let's just pick the first one or the one they specify if we had that.
+    # For now, let's just pick the first linked account.
+    selected_email = emails[0]
+    
+    service = get_gmail_service(chat_id, email=selected_email)
     if not service:
-        await update.message.reply_text("You haven't connected your Gmail yet. Send your email to get started.")
+        await update.message.reply_text("Failed to initialize Gmail service. Please try re-authenticating.")
         return
     
     try:

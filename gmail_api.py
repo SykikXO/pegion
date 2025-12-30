@@ -15,12 +15,21 @@ from googleapiclient.discovery import build
 
 from config import USERS_DIR, SCOPES
 
-def get_gmail_service(chat_id):
+def get_gmail_service(chat_id_or_path, email=None):
     """
-    Constructs and returns a Gmail API service instance for the given user (chat_id).
-    Handles token refreshing if the token is expired.
+    Constructs and returns a Gmail API service instance.
+    Accepts:
+    1. chat_id and email: looks up credentials in users/{chat_id}/{email}.json
+    2. full path: uses provided path
+    3. chat_id only: (legacy/fallback) looks up users/{chat_id}.json
     """
-    creds_file = os.path.join(USERS_DIR, f"{chat_id}.json")
+    if email:
+        creds_file = os.path.join(USERS_DIR, str(chat_id_or_path), f"{email}.json")
+    elif chat_id_or_path.endswith('.json'):
+        creds_file = chat_id_or_path
+    else:
+        creds_file = os.path.join(USERS_DIR, f"{chat_id_or_path}.json")
+
     if not os.path.exists(creds_file):
         return None
     
@@ -32,12 +41,21 @@ def get_gmail_service(chat_id):
                 with open(creds_file, 'w') as token:
                     token.write(creds.to_json())
             except Exception as e:
-                logging.error(f"Failed to refresh token for {chat_id}: {e}")
+                logging.error(f"Failed to refresh token for {creds_file}: {e}")
                 return None
         else:
             return None
             
     return build('gmail', 'v1', credentials=creds)
+
+def get_user_email(service):
+    """Fetches the email address of the authenticated user."""
+    try:
+        profile = service.users().getProfile(userId='me').execute()
+        return profile.get('emailAddress')
+    except Exception as e:
+        logging.error(f"Error fetching user profile: {e}")
+        return None
 
 def strip_html_tags(text):
     """

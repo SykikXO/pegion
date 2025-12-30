@@ -21,86 +21,109 @@ from handlers import user_privacy
 async def poll_emails(context: ContextTypes.DEFAULT_TYPE):
     """
     Job that runs every POLL_INTERVAL.
-    Iterates over all registered users, checks for new emails, and sends notifications.
+    Iterates over all registered users and their linked email accounts.
     """
     if not os.path.exists(USERS_DIR):
         return
         
-    # Loop through all user credential files
+    # 1. Process Legacy/Root Level Credentials (for users who haven't migrated)
     for filename in os.listdir(USERS_DIR):
-        if not filename.endswith('.json') or '_meta' in filename:
-            continue
-            
-        chat_id = filename.replace('.json', '')
-        
-        # Load user's start timestamp (to ignore old emails)
+        if filename.endswith('.json') and '_meta' not in filename:
+            path = os.path.join(USERS_DIR, filename)
+            if os.path.isfile(path):
+                chat_id = filename.replace('.json', '')
+                await process_user_account(context, chat_id, None)
+
+    # 2. Process Multi-Account Subdirectories
+    for chat_id in os.listdir(USERS_DIR):
+        user_dir = os.path.join(USERS_DIR, chat_id)
+        if os.path.isdir(user_dir):
+            for filename in os.listdir(user_dir):
+                if filename.endswith('.json') and '_meta' not in filename:
+                    email = filename.replace('.json', '')
+                    await process_user_account(context, chat_id, email)
+
+async def process_user_account(context, chat_id, email):
+    """Polls a single Gmail account and sends notifications."""
+    # Load user's start timestamp (to ignore old emails)
+    if email:
+        meta_path = os.path.join(USERS_DIR, str(chat_id), f"{email}_meta.json")
+    else:
         meta_path = os.path.join(USERS_DIR, f"{chat_id}_meta.json")
-        start_ts = 0
-        if os.path.exists(meta_path):
-            with open(meta_path, 'r') as f:
+        
+    start_ts = 0
+    if os.path.exists(meta_path):
+        with open(meta_path, 'r') as f:
+            try:
                 start_ts = json.load(f).get("start_time", 0)
+            except:
+                pass
+    
+    # Get Gmail Service
+    service = get_gmail_service(chat_id, email=email)
+    if not service:
+        return
         
-        # Get Gmail Service
-        service = get_gmail_service(chat_id)
-        if not service:
-            continue
-            
-        history = load_history(chat_id)
-        
-        # Fetch Messages
-        messages = list_messages(service, after_timestamp=start_ts)
-        new_ids = False
-        
-        for msg in messages:
-            if msg['id'] not in history:
-                try:
-                    # Get Full Detail
-                    message_detail = service.users().messages().get(userId='me', id=msg['id']).execute()
-                    payload = message_detail.get('payload', {})
-                    headers = payload.get('headers', [])
-                    
-                    subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
-                    sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown Sender')
-                    
-                    body = get_email_body(payload)
-                    
-                    # Use async summarization with full body (keep links for context)
-                    summary = await ollama_summarize(body, subject, sender)
-                    
-                    # Telegram limit (4096 chars)
-                    if len(summary) > 4000:
-                        summary = summary[:4000] + "..."
-                    
-                    # Check privacy setting (cast chat_id to int for dict lookup)
-                    is_protected = user_privacy.get(int(chat_id), False)
-                    
-                    # Send with Markdown formatting and Privacy setting
-                    await context.bot.send_message(
-                        chat_id=chat_id, 
-                        text=summary, 
-                        parse_mode='Markdown',
-                        protect_content=is_protected
-                    )
-                    
-                    # Mark as Read and Update History
-                    mark_as_read(service, msg['id'])
-                    history.append(msg['id'])
-                    new_ids = True
-                    
-                except Exception as e:
-                    logging.error(f"Error processing message {msg['id']} for {chat_id}: {e}")
-                    # Still add to history to prevent infinite retry loop
-                    history.append(msg['id'])
-                    new_ids = True
+    history = load_history(chat_id, email=email)
+    
+    # Fetch Messages
+    messages = list_messages(service, after_timestamp=start_ts)
+    new_ids = False
+    
+    for msg in messages:
+        if msg['id'] not in history:
+            try:
+                # Get Full Detail
+                message_detail = service.users().messages().get(userId='me', id=msg['id']).execute()
+                payload = message_detail.get('payload', {})
+                headers = payload.get('headers', [])
                 
-                # Yield to event loop so user commands stay responsive
-                await asyncio.sleep(0)
-        
-        # Save History if updated
-        if new_ids:
-            if len(history) > 10:
-                history = history[-10:]
-            save_history(chat_id, history)
+                subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
+                sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown Sender')
+                
+                # Append email address to subject if multi-account
+                if email:
+                    subject = f"[{email}] {subject}"
+                
+                body = get_email_body(payload)
+                
+                # Use async summarization with full body (keep links for context)
+                summary = await ollama_summarize(body, subject, sender)
+                
+                # Telegram limit (4096 chars)
+                if len(summary) > 4000:
+                    summary = summary[:4000] + "..."
+                
+                # Check privacy setting (cast chat_id to int for dict lookup)
+                is_protected = user_privacy.get(int(chat_id), False)
+                
+                # Send with Markdown formatting and Privacy setting
+                await context.bot.send_message(
+                    chat_id=chat_id, 
+                    text=summary, 
+                    parse_mode='Markdown',
+                    protect_content=is_protected
+                )
+                
+                # Mark as Read and Update History
+                mark_as_read(service, msg['id'])
+                history.append(msg['id'])
+                new_ids = True
+                
+            except Exception as e:
+                logging.error(f"Error processing message {msg['id']} for {chat_id} ({email}): {e}")
+                # Still add to history to prevent infinite retry loop
+                history.append(msg['id'])
+                new_ids = True
+            
+            # Yield to event loop
+            await asyncio.sleep(0)
+    
+    # Save History if updated
+    if new_ids:
+        if len(history) > 20: # Increased a bit
+            history = history[-20:]
+        save_history(chat_id, history, email=email)
 
 
 async def check_updates(context: ContextTypes.DEFAULT_TYPE):
